@@ -66,8 +66,13 @@ func TestCLIInitAndStatus(t *testing.T) {
 	setup.CustomRCDirectory = ""
 
 	// 5. Verify version
-	if Version != "0.0.2" {
-		t.Fatalf("expected version 0.0.2, got %s", Version)
+	if Version != "0.0.3" {
+		t.Fatalf("expected version 0.0.3, got %s", Version)
+	}
+
+	// 6. Test update --help
+	if err := runUpdate(context.Background(), tmpDir, []string{"--help"}); err != nil {
+		t.Fatalf("runUpdate --help failed: %v", err)
 	}
 }
 

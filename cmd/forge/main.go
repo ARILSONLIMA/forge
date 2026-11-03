@@ -15,10 +15,11 @@ import (
 	"github.com/ARILSONLIMA/forge/internal/setup"
 	"github.com/ARILSONLIMA/forge/internal/state"
 	"github.com/ARILSONLIMA/forge/internal/templates"
+	"github.com/ARILSONLIMA/forge/internal/updater"
 )
 
 // Version is the current version of the Forge CLI.
-var Version = "0.0.2"
+var Version = "0.0.3"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -51,6 +52,8 @@ func main() {
 		err = runExec(ctx, rootDir, args)
 	case "doctor":
 		err = runDoctor(ctx, rootDir, args)
+	case "update":
+		err = runUpdate(ctx, rootDir, args)
 	case "version", "-v", "--version":
 		fmt.Printf("forge version %s\n", Version)
 		return
@@ -82,6 +85,7 @@ Commands:
   gate [number]     Validate current quality gate without advancing stage
   exec [--] <cmd>   Execute shell command with RTK proxying and raw-read guards
   doctor [--install] Check environment dependencies (rtk, bd, sg, uvx, git) and config
+  update [--check]  Check for updates and upgrade Forge CLI to latest version
   version           Display Forge CLI version
   help              Display this help message
 `, Version)
@@ -441,4 +445,42 @@ Options:
 	}
 
 	return nil
+}
+
+func runUpdate(ctx context.Context, root string, args []string) error {
+	opts := updater.UpdateOptions{
+		Repository: updater.DefaultRepository,
+		BinDir:     setup.GetDefaultBinDir(),
+	}
+
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-h" || a == "--help":
+			fmt.Println(`Usage: forge update [options]
+
+Check for updates and upgrade Forge CLI to the latest version.
+
+Options:
+  -y, --yes          Automatically apply update without interactive prompts
+  --check            Check for updates without downloading or applying
+  --force            Force recompilation and reinstallation even if up to date
+  --bin-dir=<dir>    Target directory for the binary (default: ~/.local/bin)
+  -h, --help         Display this help message`)
+			return nil
+		case a == "-y" || a == "--yes":
+			opts.AutoApprove = true
+		case a == "--check":
+			opts.CheckOnly = true
+		case a == "--force":
+			opts.Force = true
+		case strings.HasPrefix(a, "--bin-dir="):
+			opts.BinDir = strings.TrimPrefix(a, "--bin-dir=")
+		case a == "--bin-dir" && i+1 < len(args):
+			opts.BinDir = args[i+1]
+			i++
+		}
+	}
+
+	return updater.RunUpdate(ctx, Version, root, opts)
 }

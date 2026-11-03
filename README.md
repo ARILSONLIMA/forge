@@ -105,6 +105,10 @@ forge gate
 # Executar comandos protegidos pelo RTK e I/O Guard
 forge exec go test ./...
 forge exec git status
+
+# Atualizar o Forge CLI automaticamente para a versão mais recente
+forge update
+forge update --check
 ```
 
 ---
