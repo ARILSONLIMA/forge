@@ -1,0 +1,9 @@
+id: dead-exports
+language: go
+severity: hint
+message: "Função exportada: confirme referências reais via serena:find_referencing_symbols (YAGNI)."
+rule:
+  pattern: func $NAME($$$ARGS) $$$RET { $$$BODY }
+constraints:
+  NAME:
+    regex: '^[A-Z]'

@@ -1,0 +1,13 @@
+id: complexity-guard
+language: rust
+severity: warning
+message: "Excesso de aninhamento condicional. Simplifique com early return no estágio SIMPLIFY."
+rule:
+  pattern: |
+    if $A {
+      if $B {
+        if $C {
+          $$$BODY
+        }
+      }
+    }

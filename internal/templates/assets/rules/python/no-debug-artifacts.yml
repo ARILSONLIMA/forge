@@ -1,0 +1,12 @@
+id: no-debug-artifacts
+language: python
+severity: error
+message: "Artefatos de debug temporários ou TODOs sem vínculo com Beads (TODO(bd-xxxx)) são proibidos antes do Ship."
+rule:
+  any:
+    - pattern: print($$$ARGS)
+    - all:
+        - kind: comment
+        - regex: 'TODO'
+        - not:
+            regex: 'TODO\(bd-[a-z0-9]+\)'

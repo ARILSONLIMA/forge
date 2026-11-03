@@ -1,0 +1,10 @@
+id: no-empty-catch
+language: python
+severity: error
+message: "Blocos de erro vazios ou silenciosos são proibidos pelos portões do Forge."
+rule:
+  pattern: |
+    try:
+      $$$BODY
+    except:
+      pass

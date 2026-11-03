@@ -1,0 +1,25 @@
+# Binaries
+/forge
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local forge initialization runs (if executed in repo)
+.forge/
+.agent/
+.mcp.json

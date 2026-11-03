@@ -1,0 +1,6 @@
+id: no-empty-catch
+language: go
+severity: error
+message: "Blocos de erro vazios ou silenciosos são proibidos pelos portões do Forge."
+rule:
+  pattern: $VAL, _ := $FUNC($$$ARGS)

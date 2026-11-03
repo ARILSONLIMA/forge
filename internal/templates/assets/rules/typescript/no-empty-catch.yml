@@ -1,0 +1,9 @@
+id: no-empty-catch
+language: typescript
+severity: error
+message: "Blocos de erro vazios ou silenciosos são proibidos pelos portões do Forge."
+rule:
+  pattern: |
+    try {
+      $$$BODY
+    } catch ($E) {}

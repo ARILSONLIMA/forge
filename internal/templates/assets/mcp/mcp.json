@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena.git",
+        "serena",
+        "start",
+        "--enable-lsp"
+      ],
+      "env": {
+        "SERENA_LOG_LEVEL": "WARN"
+      }
+    }
+  }
+}

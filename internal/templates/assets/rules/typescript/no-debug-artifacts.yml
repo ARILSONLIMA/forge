@@ -1,0 +1,13 @@
+id: no-debug-artifacts
+language: typescript
+severity: error
+message: "Artefatos de debug temporários ou TODOs sem vínculo com Beads (TODO(bd-xxxx)) são proibidos antes do Ship."
+rule:
+  any:
+    - pattern: console.log($$$ARGS)
+    - pattern: debugger
+    - all:
+        - kind: comment
+        - regex: 'TODO'
+        - not:
+            regex: 'TODO\(bd-[a-z0-9]+\)'
