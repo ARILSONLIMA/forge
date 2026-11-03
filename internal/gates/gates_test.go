@@ -10,6 +10,7 @@ import (
 
 	"github.com/ARILSONLIMA/forge/internal/config"
 	"github.com/ARILSONLIMA/forge/internal/runner"
+	"github.com/ARILSONLIMA/forge/internal/specs"
 	"github.com/ARILSONLIMA/forge/internal/state"
 )
 
@@ -82,7 +83,7 @@ func TestGate1Validation(t *testing.T) {
 		t.Fatal("expected error on missing sections, got nil")
 	}
 
-	// Case 4: Valid spec (>= 15 lines, all 4 sections)
+	// Case 4: Valid spec but missing glossary
 	var validContent strings.Builder
 	validContent.WriteString("# Spec: Token Rotation\n\n")
 	validContent.WriteString("## Objetivo\nImplementar rotatividade de tokens jwt segura.\n\n")
@@ -96,9 +97,34 @@ func TestGate1Validation(t *testing.T) {
 	_ = os.WriteFile(validSpec, []byte(validContent.String()), 0o644)
 	st.ActiveSpec = ".forge/specs/valid.md"
 
+	_, err = mgr.ValidateGate1(context.Background())
+	if err == nil {
+		t.Fatal("expected error on valid spec with missing glossary, got nil")
+	}
+
+	// Case 5: Valid spec with unpopulated skeleton glossary
+	glossaryPath := filepath.Join(tmpDir, ".forge", "GLOSSARY.md")
+	_, err = specs.WriteGlossarySkeleton(glossaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = mgr.ValidateGate1(context.Background())
+	if err == nil {
+		t.Fatal("expected error on skeleton glossary with no defined terms, got nil")
+	}
+
+	// Case 6: Valid spec with valid populated DDD glossary
+	termContent := "\n**Token**: Credencial efêmera criptografada usada para autenticação.\n_Avoid_: Chave, Cookie\n"
+	f, err := os.OpenFile(glossaryPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(termContent)
+	_ = f.Close()
+
 	res, err := mgr.ValidateGate1(context.Background())
 	if err != nil {
-		t.Fatalf("unexpected error on valid spec: %v", err)
+		t.Fatalf("unexpected error on valid spec and glossary: %v", err)
 	}
 	if !res.Passed {
 		t.Fatalf("expected Gate 1 to pass, got %+v", res)

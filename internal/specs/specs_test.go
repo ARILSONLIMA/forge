@@ -158,3 +158,77 @@ func TestListAndResolveSpec(t *testing.T) {
 		}
 	}
 }
+
+func TestGlossaryAndDraft(t *testing.T) {
+	tmpDir := t.TempDir()
+	glossaryPath := filepath.Join(tmpDir, ".forge", "GLOSSARY.md")
+
+	// 1. Missing glossary
+	if err := ValidateGlossary(tmpDir, ".forge/GLOSSARY.md"); err == nil {
+		t.Fatal("expected error on missing glossary")
+	}
+
+	// 2. Write skeleton
+	created, err := WriteGlossarySkeleton(glossaryPath)
+	if err != nil || !created {
+		t.Fatalf("expected skeleton created, got created=%v, err=%v", created, err)
+	}
+
+	// Skeleton has only template comment, so terms count is 0 -> should fail validation
+	if err := ValidateGlossary(tmpDir, ".forge/GLOSSARY.md"); err == nil {
+		t.Fatal("expected error when glossary has no defined terms")
+	}
+
+	// 3. Add valid domain term
+	termContent := "\n**Conta**: Entidade que representa o registro financeiro de um usuário.\n_Avoid_: Perfil\n"
+	f, err := os.OpenFile(glossaryPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(termContent)
+	_ = f.Close()
+
+	if err := ValidateGlossary(tmpDir, ".forge/GLOSSARY.md"); err != nil {
+		t.Fatalf("expected valid glossary to pass, got: %v", err)
+	}
+
+	// 4. Test IsSpecDraft
+	specDraftPath := filepath.Join(tmpDir, "draft.md")
+	if err := CreateSpecSkeleton(specDraftPath, "Draft Spec", ""); err != nil {
+		t.Fatal(err)
+	}
+	isDraft, reason := IsSpecDraft(specDraftPath)
+	if !isDraft {
+		t.Fatalf("expected newly created skeleton to be detected as draft, got false: %s", reason)
+	}
+
+	// Complete spec
+	completeSpecPath := filepath.Join(tmpDir, "complete.md")
+	completeContent := `# Especificação: Auth
+
+## Objetivo
+Implementar fluxo OAuth2 completo com Google e GitHub.
+
+## Contratos e Assinaturas
+- func HandleOAuthCallback(w http.ResponseWriter, r *http.Request)
+- type TokenPayload struct { AccessToken string }
+
+## Casos de Borda
+- Token expirado deve invalidar a sessão imediatamente.
+- Falha na API do provedor deve emitir alerta estruturado.
+
+## Fora de Escopo (YAGNI)
+- Integração com provedores legados SAML.
+- Migração de bancos externos.
+
+Linhas adicionais para garantir que o tamanho seja suficiente.
+Mais detalhes de engenharia e contexto do projeto.
+`
+	if err := os.WriteFile(completeSpecPath, []byte(completeContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	isDraft, reason = IsSpecDraft(completeSpecPath)
+	if isDraft {
+		t.Fatalf("expected completed spec not to be draft, got draft: %s", reason)
+	}
+}

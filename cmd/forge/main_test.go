@@ -89,8 +89,8 @@ func TestCLIInitAndStatus(t *testing.T) {
 	setup.CustomRCDirectory = ""
 
 	// 5. Verify version
-	if Version != "0.0.6" {
-		t.Fatalf("expected version 0.0.6, got %s", Version)
+	if Version != "0.0.7" {
+		t.Fatalf("expected version 0.0.7, got %s", Version)
 	}
 
 	// 6. Test update --help
@@ -219,6 +219,16 @@ func TestCLIStageTransitions(t *testing.T) {
 
 	st.ActiveSpec = ".forge/specs/auth.md"
 	_ = state.Save(filepath.Join(tmpDir, state.DefaultPath), st)
+
+	// Populate glossary with defined domain term
+	glossaryFile := filepath.Join(tmpDir, ".forge", "GLOSSARY.md")
+	termContent := "\n**Usuario**: Entidade principal que representa o ator autenticado no sistema.\n_Avoid_: Perfil, Account\n"
+	f, err := os.OpenFile(glossaryFile, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(termContent)
+	_ = f.Close()
 
 	// Now stage plan should succeed
 	if err := runStage(ctx, tmpDir, []string{"plan"}); err != nil {

@@ -17,6 +17,12 @@ const DefaultSpecsDir = ".forge/specs"
 // DefaultRoadmapPath is the standard path to the system roadmap.
 const DefaultRoadmapPath = ".forge/roadmap.md"
 
+// DefaultGlossaryPath is the standard path to the DDD ubiquitous language glossary.
+const DefaultGlossaryPath = ".forge/GLOSSARY.md"
+
+// DefaultADRDir is the standard path to Architecture Decision Records.
+const DefaultADRDir = ".forge/adr"
+
 // SpecInfo represents metadata about a feature specification.
 type SpecInfo struct {
 	Number    int    `json:"number"`
@@ -393,7 +399,7 @@ func CreateSpecSkeleton(fullPath, title, goal string) error {
 %s
 
 ## Contratos e Assinaturas
-- Tipos, interfaces ou endpoints centrais:
+- Tipos, interfaces ou endpoints centrais (alinhados a .forge/GLOSSARY.md):
   - Assinaturas de métodos e estruturas de dados de entrada/saída
   - Validações de integridade de esquema
 
@@ -434,4 +440,109 @@ O Forge associa automaticamente comandos como '/spec 1' ao item '01'.
 `
 
 	return true, os.WriteFile(fullPath, []byte(template), 0o644)
+}
+
+// WriteGlossarySkeleton generates a default .forge/GLOSSARY.md template if not present.
+func WriteGlossarySkeleton(fullPath string) (bool, error) {
+	if _, err := os.Stat(fullPath); err == nil {
+		return false, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return false, err
+	}
+
+	template := `# Glossário de Domínio (DDD)
+
+Linguagem Ubíqua e termos canônicos do sistema. Mantenha definições concisas (1-2 frases) focadas no que o conceito É.
+
+## Termos
+
+<!--
+Exemplo de formato para novos termos:
+**NomeDoTermo**:
+Definição concisa de uma ou duas frases sobre o conceito único no domínio.
+_Avoid_: SinônimoAmbíguo, OutroNome
+-->
+`
+	return true, os.WriteFile(fullPath, []byte(template), 0o644)
+}
+
+// ValidateGlossary verifies the existence and consistency of the DDD glossary.
+// It checks that the file exists, has a valid title, and contains at least one defined domain term.
+func ValidateGlossary(rootDir, glossaryPath string) error {
+	fullPath := glossaryPath
+	if !filepath.IsAbs(fullPath) {
+		fullPath = filepath.Join(rootDir, glossaryPath)
+	}
+
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("glossary file %q does not exist. O alinhamento DDD e interrogação são obrigatórios no estágio SPEC", glossaryPath)
+		}
+		return fmt.Errorf("reading glossary file %q: %w", glossaryPath, err)
+	}
+
+	content := strings.TrimSpace(string(data))
+	if len(content) == 0 {
+		return fmt.Errorf("glossary file %q is empty", glossaryPath)
+	}
+
+	lower := strings.ToLower(content)
+	if !strings.Contains(lower, "# glossár") && !strings.Contains(lower, "# glossar") {
+		return fmt.Errorf("glossary %q is missing a '# Glossário' or '# Glossary' header", glossaryPath)
+	}
+
+	// Scan lines ignoring comment blocks <!-- ... -->
+	lines := strings.Split(content, "\n")
+	inComment := false
+	reTerm := regexp.MustCompile(`^\s*\*\*([^*]+)\*\*:\s*`)
+	termCount := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "<!--") {
+			inComment = true
+		}
+		if inComment {
+			if strings.Contains(trimmed, "-->") {
+				inComment = false
+			}
+			continue
+		}
+		if m := reTerm.FindStringSubmatch(trimmed); m != nil {
+			term := strings.TrimSpace(m[1])
+			if term != "" {
+				termCount++
+			}
+		}
+	}
+
+	if termCount == 0 {
+		return fmt.Errorf("glossary %q contains no defined domain terms (expected format: **Termo**: Definição)", glossaryPath)
+	}
+
+	return nil
+}
+
+// IsSpecDraft checks if a spec file is a draft, placeholder, or incomplete.
+func IsSpecDraft(fullPath string) (bool, string) {
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return true, "spec file does not exist"
+	}
+	content := string(data)
+	lines := strings.Split(content, "\n")
+	if len(lines) < 15 {
+		return true, fmt.Sprintf("spec has only %d lines (minimum 15)", len(lines))
+	}
+	if strings.Contains(content, "Implementação e alinhamento dos contratos da especificação.") {
+		return true, "spec contains default skeleton goal placeholder"
+	}
+	if strings.Contains(content, "Assinaturas de métodos e estruturas de dados de entrada/saída") &&
+		strings.Contains(content, "Validações de integridade de esquema") {
+		return true, "spec contains default skeleton contracts placeholder"
+	}
+	return false, "complete"
 }

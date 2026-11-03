@@ -152,10 +152,11 @@ func (m *Manager) ValidateCurrentGate(ctx context.Context) (*GateResult, error) 
 
 // ValidateGate1: SPEC -> PLAN
 // Verifies markdown spec contains the 4 mandatory sections and is between 15 and 120 lines.
+// Verifies .forge/GLOSSARY.md exists and contains defined DDD domain terms.
 func (m *Manager) ValidateGate1(ctx context.Context) (*GateResult, error) {
 	res := &GateResult{
 		GateNumber: 1,
-		Name:       "Gate 1 (Spec Validation)",
+		Name:       "Gate 1 (Spec & Glossary Validation)",
 		From:       state.StageSpec,
 		To:         state.StagePlan,
 	}
@@ -217,8 +218,15 @@ func (m *Manager) ValidateGate1(ctx context.Context) (*GateResult, error) {
 		return res, errors.New(res.Error)
 	}
 
+	// 2. Validate DDD Domain Glossary (.forge/GLOSSARY.md)
+	glossaryPath := specs.DefaultGlossaryPath
+	if err := specs.ValidateGlossary(m.RootDir, glossaryPath); err != nil {
+		res.Error = fmt.Sprintf("Gate 1 failed: %v. Execute o alinhamento de requisitos e interrogação (/spec) para registrar os termos de domínio no glossário.", err)
+		return res, errors.New(res.Error)
+	}
+
 	res.Passed = true
-	res.Details = fmt.Sprintf("Spec %s validated (%d lines, all 4 sections present)", specPath, lineCount)
+	res.Details = fmt.Sprintf("Spec %s validated (%d lines, all 4 sections present) and DDD glossary (%s) verified", specPath, lineCount, glossaryPath)
 	m.State.MarkGatePassed(state.StageSpec)
 	return res, nil
 }

@@ -138,9 +138,9 @@ func TestFormatDoctorReport(t *testing.T) {
 		t.Error("report should contain '[✓] OK'")
 	}
 
-	reportWithVer := FormatDoctorReport(statuses, tmpDir, "0.0.6")
-	if !strings.Contains(reportWithVer, "Forge CLI v0.0.6") {
-		t.Errorf("expected report to contain 'Forge CLI v0.0.6', got: %s", reportWithVer)
+	reportWithVer := FormatDoctorReport(statuses, tmpDir, "0.0.7")
+	if !strings.Contains(reportWithVer, "Forge CLI v0.0.7") {
+		t.Errorf("expected report to contain 'Forge CLI v0.0.7', got: %s", reportWithVer)
 	}
 }
 

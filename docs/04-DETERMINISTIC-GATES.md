@@ -6,7 +6,7 @@ O comando `forge stage <próximo>` ou `forge gate` executa verificações binár
 
 | Gate       | Transição            | Validação Executada pelo Binário `forge`                     | Critério de Aprovação                                                              |
 |:---------- |:-------------------- |:------------------------------------------------------------ |:---------------------------------------------------------------------------------- |
-| **Gate 1** | `SPEC -> PLAN`       | Parser Markdown valida `.forge/specs/<slug>.md`              | Presença das 4 seções obrigatórias e tamanho entre 15 e 120 linhas                 |
+| **Gate 1** | `SPEC -> PLAN`       | Parser Markdown valida `.forge/specs/<slug>.md` e `.forge/GLOSSARY.md` | Presença das 4 seções obrigatórias, tamanho entre 15 e 120 linhas e Glossário DDD com termos de domínio definidos |
 | **Gate 2** | `PLAN -> BUILD`      | Executa `bd ready --json`                                    | Pelo menos 1 tarefa aberta e desbloqueada no grafo DAG                             |
 | **Gate 3** | `BUILD -> TEST`      | Executa `rtk <build_cmd>` e checa árvore suja no Git         | Compilação limpa (exit code 0) e arquivos modificados presentes                    |
 | **Gate 4** | `TEST -> REVIEW`     | Executa `rtk <test_cmd>`                                     | Exit code 0 na suíte de testes e pelo menos 1 arquivo de teste tocado ou validado  |

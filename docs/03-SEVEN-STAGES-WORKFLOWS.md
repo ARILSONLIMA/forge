@@ -2,24 +2,25 @@
 
 Cada estágio possui um workflow acionável no Antigravity CLI (`/spec`, `/plan`, `/build`, `/test`, `/review`, `/simplify`, `/ship`) e um prompt de regra ativa ultracompacto (< 250 tokens).
 
-## Estágio 1: `/spec` (Descoberta e Contratos)
+## Estágio 1: `/spec` (Descoberta, Interrogação & Domínio DDD)
 
-- **Inspiração**: Matt Pocock (`To-Spec` / `Wayfinder`) + Serena Overview.
-- **Objetivo**: Alinhar requisitos, mapear contratos existentes sem ler corpos de funções e gerar `.forge/specs/<slug>.md`.
-- **Ferramentas Permitidas**: `serena:get_symbols_overview`, `serena:find_symbol` (apenas assinaturas), escrita em `.forge/specs/`.
+- **Inspiração**: Matt Pocock (`grill-me`, `grill-with-docs`, `domain-modeling`, `To-Spec`) + Serena Overview.
+- **Objetivo**: Descoberta profunda de requisitos por árvore de decisão (*grilling* em rodadas), modelagem de Linguagem Ubíqua em `.forge/GLOSSARY.md` (e ADRs em `.forge/adr/`), mapeamento cirúrgico de contratos existentes sem ler corpos de funções e geração de `.forge/specs/<slug>.md`.
+- **Ferramentas Permitidas**: `serena:get_symbols_overview`, `serena:find_symbol` (apenas assinaturas), escrita em `.forge/specs/`, escrita em `.forge/GLOSSARY.md` e `.forge/adr/`.
 - **Ferramentas Proibidas**: Edição de código-fonte, criação de tarefas no Beads, leitura bruta de arquivos.
 - **Template do `.agent/rules/active-stage.md` (Estágio SPEC)**:
 
 ```markdown
 # ESTÁGIO ATIVO: SPEC
-1. Inspecione os módulos afetados APENAS via `serena:get_symbols_overview` (não leia corpos de funções).
-2. Se houver ambiguidade de negócio, faça no máximo 3 perguntas diretas ao usuário.
-3. Gere o arquivo `.forge/specs/<slug>.md` contendo estritamente:
+1. Inspecione contratos via `serena:get_symbols_overview` (fatos do código sem perguntar ao usuário).
+2. Se spec incompleta ou incerteza: execute a Interrogação por Árvore de Decisão em rodadas (❓ Q... ➡️ <recomendação>) e atualize `.forge/GLOSSARY.md` inline com a Linguagem Ubíqua.
+3. Se spec completa: apresente resumo de 3 linhas e confirme avanço.
+4. Mantenha {{ACTIVE_SPEC}} (15-120 linhas) com:
 - `## Objetivo` (máx. 3 linhas)
-- `## Contratos e Assinaturas` (tipos, interfaces, rotas ou tabelas afetadas)
+- `## Contratos e Assinaturas` (alinhados a .forge/GLOSSARY.md)
 - `## Casos de Borda` (cenários críticos de falha)
 - `## Fora de Escopo (YAGNI)` (o que NÃO será construído)
-4. Finalize executando `forge stage plan`.
+5. Valide Gate 1 (.forge/GLOSSARY.md + spec) e avance com `forge stage plan`.
 ```
 
 ## Estágio 2: `/plan` (Fatiamento Vertical no Grafo Beads)

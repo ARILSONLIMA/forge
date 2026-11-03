@@ -30,7 +30,7 @@ import (
 )
 
 // Version is the current version of the Forge CLI.
-var Version = "0.0.6"
+var Version = "0.0.7"
 
 func init() {
 	setup.CurrentVersion = Version
@@ -232,6 +232,7 @@ func runInit(root string, args []string) error {
 		filepath.Join(root, ".forge", "rules"),
 		filepath.Join(root, ".forge", "logs"),
 		filepath.Join(root, ".forge", "backups"),
+		filepath.Join(root, ".forge", "adr"),
 		filepath.Join(root, ".agents", "skills"),
 		filepath.Join(root, ".agent", "rules"),
 		filepath.Join(root, ".agent", "workflows"),
@@ -296,6 +297,12 @@ func runInit(root string, args []string) error {
 	roadmapPath := filepath.Join(root, specs.DefaultRoadmapPath)
 	if created, err := specs.WriteRoadmapSkeleton(roadmapPath); err == nil && created {
 		fmt.Println("✓ Generated project roadmap template in .forge/roadmap.md")
+	}
+
+	// 8.5. DDD Domain Glossary (.forge/GLOSSARY.md)
+	glossaryPath := filepath.Join(root, specs.DefaultGlossaryPath)
+	if created, err := specs.WriteGlossarySkeleton(glossaryPath); err == nil && created {
+		fmt.Println("✓ Initialized DDD domain glossary in .forge/GLOSSARY.md")
 	}
 
 	// 9. Active stage rule
@@ -629,6 +636,16 @@ func runSpec(root string, args []string) error {
 				fmt.Printf("  %s [%02d] %s%s\n", status, item.Number, item.Title, specMarker)
 			}
 		}
+
+		glossaryFile := filepath.Join(root, specs.DefaultGlossaryPath)
+		if gErr := specs.ValidateGlossary(root, specs.DefaultGlossaryPath); gErr == nil {
+			fmt.Printf("\n✓ DDD Glossary: %s (Consistent)\n", specs.DefaultGlossaryPath)
+		} else if _, statErr := os.Stat(glossaryFile); statErr == nil {
+			fmt.Printf("\n! DDD Glossary: %s (Incomplete: %v)\n", specs.DefaultGlossaryPath, gErr)
+		} else {
+			fmt.Printf("\n! DDD Glossary: %s (Missing - required for Gate 1)\n", specs.DefaultGlossaryPath)
+		}
+
 		return nil
 	}
 
@@ -660,6 +677,7 @@ func runSpec(root string, args []string) error {
 
 	if created {
 		fmt.Printf("✓ Created specification skeleton at %s\n", resSpec.RelPath)
+		fmt.Println("  Tip: Run '/spec' to start Decision Tree Interrogation & DDD Modeling.")
 	}
 	fmt.Printf("✓ Active specification set to: [%s] %s (%s)\n", resSpec.PaddedNum, resSpec.Title, resSpec.RelPath)
 	if resSpec.Goal != "" {
