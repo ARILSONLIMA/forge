@@ -22,6 +22,8 @@ type GateThresholds struct {
 	MaxDiffLinesPerTicket     int  `json:"max_diff_lines_per_ticket"`
 	ForbidUnreferencedExports bool `json:"forbid_unreferenced_exports"`
 	AstGrepStrict             bool `json:"ast_grep_strict"`
+	MaxFunctionLines          int  `json:"max_function_lines"`
+	MaxNestingDepth           int  `json:"max_nesting_depth"`
 }
 
 // Paths holds configurable Forge directories.
@@ -57,6 +59,8 @@ func DetectProject(rootDir string) Config {
 			MaxDiffLinesPerTicket:     300,
 			ForbidUnreferencedExports: true,
 			AstGrepStrict:             true,
+			MaxFunctionLines:          50,
+			MaxNestingDepth:           4,
 		},
 		Paths: Paths{
 			SpecsDir: ".forge/specs",
@@ -109,6 +113,8 @@ gate_thresholds:
   max_diff_lines_per_ticket: %d
   forbid_unreferenced_exports: %t
   ast_grep_strict: %t
+  max_function_lines: %d
+  max_nesting_depth: %d
 
 paths:
   specs_dir: %q
@@ -122,6 +128,8 @@ paths:
 		c.GateThresholds.MaxDiffLinesPerTicket,
 		c.GateThresholds.ForbidUnreferencedExports,
 		c.GateThresholds.AstGrepStrict,
+		c.GateThresholds.MaxFunctionLines,
+		c.GateThresholds.MaxNestingDepth,
 		c.Paths.SpecsDir,
 		c.Paths.RulesDir,
 	)
@@ -218,6 +226,14 @@ func ParseYAML(content string) (Config, error) {
 			case "ast_grep_strict":
 				if b, err := strconv.ParseBool(val); err == nil {
 					cfg.GateThresholds.AstGrepStrict = b
+				}
+			case "max_function_lines":
+				if n, err := strconv.Atoi(val); err == nil {
+					cfg.GateThresholds.MaxFunctionLines = n
+				}
+			case "max_nesting_depth":
+				if n, err := strconv.Atoi(val); err == nil {
+					cfg.GateThresholds.MaxNestingDepth = n
 				}
 			}
 		case "paths":

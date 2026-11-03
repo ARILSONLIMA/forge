@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ARILSONLIMA/forge/internal/config"
+	"github.com/ARILSONLIMA/forge/internal/envskeleton"
 	"github.com/ARILSONLIMA/forge/internal/state"
 )
 
@@ -184,11 +185,24 @@ func QueryVersion(ctx context.Context, binaryName string) string {
 	return firstLine
 }
 
+// CurrentVersion can be set to reflect the Forge CLI version in reports.
+var CurrentVersion string
+
 // FormatDoctorReport produces the diagnostic report as a string.
-func FormatDoctorReport(statuses []DependencyStatus, rootDir string) string {
+func FormatDoctorReport(statuses []DependencyStatus, rootDir string, forgeVersion ...string) string {
 	var b strings.Builder
 
-	b.WriteString("🏥 Running Forge Doctor Diagnostics...\n\n")
+	ver := CurrentVersion
+	if len(forgeVersion) > 0 && forgeVersion[0] != "" {
+		ver = forgeVersion[0]
+	}
+
+	if ver != "" {
+		b.WriteString(fmt.Sprintf("🏥 Running Forge Doctor Diagnostics (Forge CLI v%s)...\n\n", strings.TrimPrefix(ver, "v")))
+	} else {
+		b.WriteString("🏥 Running Forge Doctor Diagnostics...\n\n")
+	}
+
 	b.WriteString(fmt.Sprintf("%-26s %-12s %-10s %s\n", "TOOL / DEPENDENCY", "STATUS", "VERSION", "LOCATION / TIP"))
 	b.WriteString(fmt.Sprintf("%-26s %-12s %-10s %s\n", "-----------------", "------", "-------", "--------------"))
 
@@ -239,6 +253,22 @@ func FormatDoctorReport(statuses []DependencyStatus, rootDir string) string {
 		b.WriteString(fmt.Sprintf(" [✓] %s exists\n", ".mcp.json"))
 	} else {
 		b.WriteString(fmt.Sprintf(" [-] %s missing (run 'forge init')\n", ".mcp.json"))
+	}
+
+	hookPath := filepath.Join(rootDir, ".agent", "hooks", "forge-pretool.sh")
+	if _, err := os.Stat(hookPath); err == nil {
+		b.WriteString(fmt.Sprintf(" [✓] %s exists (Antigravity Hard Gate active)\n", ".agent/hooks/forge-pretool.sh"))
+	} else {
+		b.WriteString(fmt.Sprintf(" [-] %s missing (run 'forge init')\n", ".agent/hooks/forge-pretool.sh"))
+	}
+
+	envRep, _ := envskeleton.Inspect(rootDir)
+	if envRep != nil && envRep.EnvFile != "" {
+		if envRep.Healthy {
+			b.WriteString(fmt.Sprintf(" [✓] %s valid (%d keys, zero leaks)\n", envRep.EnvFile, len(envRep.Keys)))
+		} else {
+			b.WriteString(fmt.Sprintf(" [!] %s has issues (%d missing, %d placeholders)\n", envRep.EnvFile, len(envRep.MissingKeys), len(envRep.PlaceholderKeys)))
+		}
 	}
 
 	if !allOk {

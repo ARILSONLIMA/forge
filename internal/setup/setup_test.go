@@ -95,6 +95,11 @@ func TestFormatDoctorReport(t *testing.T) {
 	if !strings.Contains(report, "[✓] OK") {
 		t.Error("report should contain '[✓] OK'")
 	}
+
+	reportWithVer := FormatDoctorReport(statuses, tmpDir, "0.0.5")
+	if !strings.Contains(reportWithVer, "Forge CLI v0.0.5") {
+		t.Errorf("expected report to contain 'Forge CLI v0.0.5', got: %s", reportWithVer)
+	}
 }
 
 func TestEnsureBinInPath(t *testing.T) {

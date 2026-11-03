@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,9 +49,23 @@ func TestCLIInitAndStatus(t *testing.T) {
 		}
 	}
 
+	// Verify hooks generated
+	for _, h := range []string{"forge-pretool.sh", "forge-sessionstart.sh"} {
+		hFile := filepath.Join(tmpDir, ".agent", "hooks", h)
+		if _, err := os.Stat(hFile); err != nil {
+			t.Fatalf("expected hook %s to exist", h)
+		}
+	}
+
 	// 2. Run status
 	if err := runStatus(tmpDir); err != nil {
 		t.Fatalf("runStatus failed: %v", err)
+	}
+	if err := runStatus(tmpDir, "--brief"); err != nil {
+		t.Fatalf("runStatus --brief failed: %v", err)
+	}
+	if err := runStatus(tmpDir, "--stats"); err != nil {
+		t.Fatalf("runStatus --stats failed: %v", err)
 	}
 
 	// 3. Run doctor
@@ -66,13 +81,85 @@ func TestCLIInitAndStatus(t *testing.T) {
 	setup.CustomRCDirectory = ""
 
 	// 5. Verify version
-	if Version != "0.0.3" {
-		t.Fatalf("expected version 0.0.3, got %s", Version)
+	if Version != "0.0.5" {
+		t.Fatalf("expected version 0.0.5, got %s", Version)
 	}
 
 	// 6. Test update --help
 	if err := runUpdate(context.Background(), tmpDir, []string{"--help"}); err != nil {
 		t.Fatalf("runUpdate --help failed: %v", err)
+	}
+}
+
+func TestCLINewCommands(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := runInit(tmpDir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Initialize git for checkpoint test
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmpDir
+		_ = cmd.Run()
+	}
+	runGit("init")
+	runGit("config", "user.name", "Tester")
+	runGit("config", "user.email", "test@local")
+	_ = os.WriteFile(filepath.Join(tmpDir, "dummy.txt"), []byte("hello\n"), 0o644)
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+
+	// 1. Briefing
+	if err := runBriefing(tmpDir); err != nil {
+		t.Errorf("runBriefing failed: %v", err)
+	}
+
+	// 2. Map
+	if err := runMap(tmpDir); err != nil {
+		t.Errorf("runMap failed: %v", err)
+	}
+
+	// 3. Checkpoint & Rollback
+	if err := runCheckpoint(tmpDir, []string{"unit-test"}); err != nil {
+		t.Errorf("runCheckpoint failed: %v", err)
+	}
+	if err := runCheckpoint(tmpDir, []string{"list"}); err != nil {
+		t.Errorf("runCheckpoint list failed: %v", err)
+	}
+	if err := runRollback(tmpDir, nil); err != nil {
+		t.Errorf("runRollback failed: %v", err)
+	}
+
+	// 4. Tech Debt
+	codeWithDebt := "// SHORTCUT: mock implementation\nfunc Mock() {}\n"
+	_ = os.WriteFile(filepath.Join(tmpDir, "mock.go"), []byte(codeWithDebt), 0o644)
+	if err := runDebt(tmpDir); err != nil {
+		t.Errorf("runDebt failed: %v", err)
+	}
+
+	// 5. Env
+	_ = os.WriteFile(filepath.Join(tmpDir, ".env.example"), []byte("PORT=80\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("PORT=8080\n"), 0o644)
+	if err := runEnv(tmpDir); err != nil {
+		t.Errorf("runEnv failed: %v", err)
+	}
+
+	// 6. Shrink
+	docPath := filepath.Join(tmpDir, "doc.md")
+	_ = os.WriteFile(docPath, []byte("# Title\n\nHope this helps.\n\n`code`\n"), 0o644)
+	if err := runShrink(tmpDir, []string{docPath}); err != nil {
+		t.Errorf("runShrink failed: %v", err)
+	}
+
+	// 7. Stats
+	if err := runStats(tmpDir); err != nil {
+		t.Errorf("runStats failed: %v", err)
+	}
+
+	// 8. Hook
+	if err := runHook(tmpDir, []string{"sessionstart"}); err != nil {
+		t.Errorf("runHook sessionstart failed: %v", err)
 	}
 }
 

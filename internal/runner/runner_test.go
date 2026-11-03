@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ARILSONLIMA/forge/internal/metrics"
 	"github.com/ARILSONLIMA/forge/internal/state"
 )
 
@@ -39,10 +40,25 @@ func TestCheckRawRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Case 1: IDLE stage (guard inactive)
+	// Create .env file
+	envFile := filepath.Join(tmpDir, ".env")
+	if err := os.WriteFile(envFile, []byte("SECRET=12345\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Case 1: IDLE stage (guard inactive for code)
 	err := CheckRawRead(state.StageIdle, []string{"cat", largeFile}, tmpDir)
 	if err != nil {
 		t.Fatalf("expected nil in IDLE, got %v", err)
+	}
+
+	// Case 1b: Secret shield blocks .env even in IDLE!
+	err = CheckRawRead(state.StageIdle, []string{"cat", envFile}, tmpDir)
+	if err == nil {
+		t.Fatal("expected error blocking .env in IDLE, got nil")
+	}
+	if !strings.Contains(err.Error(), "[FORGE SECRET SHIELD]") {
+		t.Fatalf("expected secret shield error, got %v", err)
 	}
 
 	// Case 2: BUILD stage with small code file -> allowed
@@ -82,6 +98,45 @@ func TestCheckRawRead(t *testing.T) {
 	err = CheckRawRead(state.StageBuild, []string{"go", "vet", largeFile}, tmpDir)
 	if err != nil {
 		t.Fatalf("expected nil for non-read command, got %v", err)
+	}
+}
+
+func TestSanitizeOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "last.log")
+	tracker := metrics.NewTracker(tmpDir)
+
+	// Build 100 lines of output with ANSI codes
+	var b strings.Builder
+	for i := 1; i <= 100; i++ {
+		b.WriteString("\x1b[32mline ")
+		b.WriteString(string(rune('0' + (i % 10))))
+		b.WriteString("\x1b[0m\n")
+	}
+
+	sanitized := SanitizeOutput(b.String(), 50, 20, 20, logFile, tracker)
+
+	// Check truncation banner
+	if !strings.Contains(sanitized, "[FORGE HEADROOM]") {
+		t.Fatalf("expected headroom banner, got: %s", sanitized)
+	}
+	if strings.Contains(sanitized, "\x1b[32m") {
+		t.Fatalf("expected ANSI stripped, got: %s", sanitized)
+	}
+
+	// Verify log file written with clean text
+	logData, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	if len(strings.Split(string(logData), "\n")) < 100 {
+		t.Fatalf("expected full output in log file, got %d lines", len(strings.Split(string(logData), "\n")))
+	}
+
+	// Verify token metrics recorded
+	m, _ := tracker.Load()
+	if m.Categories["headroom_truncator"].Events != 1 {
+		t.Errorf("expected 1 headroom event, got %d", m.Categories["headroom_truncator"].Events)
 	}
 }
 

@@ -12,9 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ARILSONLIMA/forge/internal/checkpoint"
+	"github.com/ARILSONLIMA/forge/internal/complexity"
 	"github.com/ARILSONLIMA/forge/internal/config"
 	"github.com/ARILSONLIMA/forge/internal/runner"
 	"github.com/ARILSONLIMA/forge/internal/state"
+	"github.com/ARILSONLIMA/forge/internal/testisolate"
 )
 
 // GateResult holds the outcome of a quality gate validation.
@@ -189,7 +192,11 @@ func (m *Manager) ValidateGate1(ctx context.Context) (*GateResult, error) {
 	lines := strings.Split(string(contentBytes), "\n")
 	lineCount := len(lines)
 	if lineCount < 15 || lineCount > 120 {
-		res.Error = fmt.Sprintf("spec line count %d is outside required range [15, 120] lines", lineCount)
+		tip := ""
+		if lineCount > 120 {
+			tip = fmt.Sprintf(" Dica: use 'forge shrink %s' para podar prolixidade mantendo contratos.", specPath)
+		}
+		res.Error = fmt.Sprintf("spec line count %d is outside required range [15, 120] lines.%s", lineCount, tip)
 		return res, errors.New(res.Error)
 	}
 
@@ -321,6 +328,9 @@ func (m *Manager) ValidateGate4(ctx context.Context) (*GateResult, error) {
 		summary := extractLastLines(combinedOutput, 15)
 		m.State.LastTestFailureSummary = summary
 
+		// Save isolated test failure report
+		_, _ = testisolate.SaveReport(m.RootDir, m.Config.Language, testCmd, combinedOutput)
+
 		if m.State.TestFailCount >= 2 {
 			_ = m.State.Transition(state.StageBuild)
 			res.Error = fmt.Sprintf("test suite failed twice consecutively. Auto-rollback to BUILD initiated:\n%s", summary)
@@ -329,6 +339,10 @@ func (m *Manager) ValidateGate4(ctx context.Context) (*GateResult, error) {
 		}
 		return res, errors.New(res.Error)
 	}
+
+	// Tests passed: clear failed tests report and take git checkpoint
+	testisolate.ClearReport(m.RootDir)
+	_, _ = checkpoint.NewManager(m.RootDir).Create("test-green")
 
 	// Verify test file touched
 	statusOut, _ := m.GitExec(ctx, m.RootDir, "status", "--porcelain")
@@ -439,6 +453,18 @@ func (m *Manager) ValidateGate5(ctx context.Context) (*GateResult, error) {
 	if maxDiff > 0 && currentDiff > maxDiff {
 		res.Error = fmt.Sprintf("diff size (%d lines) exceeds max_diff_lines_per_ticket threshold (%d)", currentDiff, maxDiff)
 		return res, errors.New(res.Error)
+	}
+
+	// Complexity & Code Smells Guard
+	if m.Config.GateThresholds.MaxFunctionLines > 0 || m.Config.GateThresholds.MaxNestingDepth > 0 {
+		violations, err := complexity.CheckFiles(m.RootDir, m.State.ModifiedSymbols, complexity.Options{
+			MaxFunctionLines: m.Config.GateThresholds.MaxFunctionLines,
+			MaxNestingDepth:  m.Config.GateThresholds.MaxNestingDepth,
+		})
+		if err == nil && len(violations) > 0 {
+			res.Error = fmt.Sprintf("complexity guard detected structural smells:\n%s", complexity.FormatViolations(violations))
+			return res, errors.New(res.Error)
+		}
 	}
 
 	res.Passed = true

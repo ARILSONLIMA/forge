@@ -106,6 +106,37 @@ forge gate
 forge exec go test ./...
 forge exec git status
 
+# Briefing Zero-Read no turno 0 (<120 tokens)
+forge briefing
+forge status --brief
+
+# Mapa ultrarrápido de símbolos públicos do projeto (<450 tokens)
+forge map
+
+# Executar suíte de testes ou isolar apenas testes que falharam
+forge test
+forge test --failed
+
+# Micro-checkpoints no Git e Rollback cirúrgico
+forge checkpoint "pre-refactor"
+forge checkpoint list
+forge rollback
+
+# Auditoria de débitos técnicos e atalhos intencionais (// SHORTCUT:)
+forge debt
+
+# Auditoria segura de variáveis de ambiente sem vazar segredos
+forge env
+
+# Compactação de especificações prolixas (preservando blocos de código)
+forge shrink .forge/specs/auth.md
+
+# Métricas de economia real de tokens e ROI
+forge stats
+
+# Servidor MCP nativo embutido para Antigravity CLI
+forge mcp
+
 # Atualizar o Forge CLI automaticamente para a versão mais recente
 forge update
 forge update --check

@@ -114,7 +114,7 @@ func WriteRules(root, rulesDir, language string) error {
 	return nil
 }
 
-// WriteMCP writes .mcp.json (Serena). An existing file is left untouched
+// WriteMCP writes .mcp.json (Serena + Forge). An existing file is left untouched
 // and false is returned, so user MCP servers are never clobbered.
 func WriteMCP(root string) (bool, error) {
 	path := filepath.Join(root, ".mcp.json")
@@ -126,6 +126,27 @@ func WriteMCP(root string) (bool, error) {
 		return false, err
 	}
 	return true, writeAtomic(path, data)
+}
+
+// WriteHooks writes default Antigravity lifecycle hooks to .agent/hooks/.
+func WriteHooks(root, forgeBin string) error {
+	if forgeBin == "" {
+		forgeBin = "forge"
+	}
+	pretool := fmt.Sprintf("#!/usr/bin/env bash\n# Forge PreToolUse Hook\n%s hook pretool\n", forgeBin)
+	sessionstart := fmt.Sprintf("#!/usr/bin/env bash\n# Forge SessionStart Hook\n%s hook sessionstart\n", forgeBin)
+
+	if err := writeAtomic(filepath.Join(root, ".agent/hooks/forge-pretool.sh"), []byte(pretool)); err != nil {
+		return err
+	}
+	_ = os.Chmod(filepath.Join(root, ".agent/hooks/forge-pretool.sh"), 0o755)
+
+	if err := writeAtomic(filepath.Join(root, ".agent/hooks/forge-sessionstart.sh"), []byte(sessionstart)); err != nil {
+		return err
+	}
+	_ = os.Chmod(filepath.Join(root, ".agent/hooks/forge-sessionstart.sh"), 0o755)
+
+	return nil
 }
 
 func writeAtomic(path string, data []byte) error {

@@ -9,17 +9,31 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ARILSONLIMA/forge/internal/briefing"
+	"github.com/ARILSONLIMA/forge/internal/checkpoint"
 	"github.com/ARILSONLIMA/forge/internal/config"
+	"github.com/ARILSONLIMA/forge/internal/debt"
+	"github.com/ARILSONLIMA/forge/internal/envskeleton"
 	"github.com/ARILSONLIMA/forge/internal/gates"
+	"github.com/ARILSONLIMA/forge/internal/hooks"
+	"github.com/ARILSONLIMA/forge/internal/mcp"
+	"github.com/ARILSONLIMA/forge/internal/metrics"
 	"github.com/ARILSONLIMA/forge/internal/runner"
 	"github.com/ARILSONLIMA/forge/internal/setup"
+	"github.com/ARILSONLIMA/forge/internal/shrink"
 	"github.com/ARILSONLIMA/forge/internal/state"
+	"github.com/ARILSONLIMA/forge/internal/symbols"
 	"github.com/ARILSONLIMA/forge/internal/templates"
+	"github.com/ARILSONLIMA/forge/internal/testisolate"
 	"github.com/ARILSONLIMA/forge/internal/updater"
 )
 
 // Version is the current version of the Forge CLI.
-var Version = "0.0.3"
+var Version = "0.0.5"
+
+func init() {
+	setup.CurrentVersion = Version
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -43,7 +57,29 @@ func main() {
 	case "init":
 		err = runInit(rootDir, args)
 	case "status":
-		err = runStatus(rootDir)
+		err = runStatus(rootDir, args...)
+	case "briefing":
+		err = runBriefing(rootDir)
+	case "map":
+		err = runMap(rootDir)
+	case "checkpoint":
+		err = runCheckpoint(rootDir, args)
+	case "rollback":
+		err = runRollback(rootDir, args)
+	case "test":
+		err = runTest(ctx, rootDir, args)
+	case "debt":
+		err = runDebt(rootDir)
+	case "env":
+		err = runEnv(rootDir)
+	case "shrink":
+		err = runShrink(rootDir, args)
+	case "stats":
+		err = runStats(rootDir)
+	case "hook":
+		err = runHook(rootDir, args)
+	case "mcp":
+		err = runMCP(rootDir)
 	case "stage":
 		err = runStage(ctx, rootDir, args)
 	case "gate":
@@ -80,9 +116,20 @@ Usage:
 Commands:
   setup [--yes]     Install and configure ecosystem dependencies (rtk, bd, sg, uvx)
   init              Initialize Forge in current project (.forge/, .agent/, .mcp.json)
-  status            Show current stage, active task, gates passed and integrity
+  status [--brief]  Show current stage, active task, gates passed and integrity
+  briefing          Display ultra-compact Zero-Read session briefing (<120 tokens)
   stage <name>      Transition to target stage (validates exit gate deterministically)
   gate [number]     Validate current quality gate without advancing stage
+  map               Generate fast public symbol map of the codebase (<450 tokens)
+  test [--failed]   Run tests via RTK, or rerun only failing tests with --failed
+  checkpoint [lbl]  Create lightweight git snapshot checkpoint (or 'list')
+  rollback [id]     Restore working tree to specified checkpoint
+  debt              Audit technical debt and shortcuts (// SHORTCUT:, // TODO:)
+  env               Inspect .env vs .env.example safely with zero secret leakage
+  shrink <file>     Compress spec/markdown removing fluff while keeping code verbatim
+  stats             Display Token Economy metrics and token savings breakdown
+  hook <action>     Execute Antigravity lifecycle hooks (pretool, sessionstart)
+  mcp               Start native embedded MCP JSON-RPC server over stdio
   exec [--] <cmd>   Execute shell command with RTK proxying and raw-read guards
   doctor [--install] Check environment dependencies (rtk, bd, sg, uvx, git) and config
   update [--check]  Check for updates and upgrade Forge CLI to latest version
@@ -138,8 +185,10 @@ func runInit(root string, args []string) error {
 		filepath.Join(root, ".forge", "specs"),
 		filepath.Join(root, ".forge", "rules"),
 		filepath.Join(root, ".forge", "logs"),
+		filepath.Join(root, ".forge", "backups"),
 		filepath.Join(root, ".agent", "rules"),
 		filepath.Join(root, ".agent", "workflows"),
+		filepath.Join(root, ".agent", "hooks"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -169,39 +218,54 @@ func runInit(root string, args []string) error {
 	}
 	fmt.Println("✓ Generated 7 Antigravity workflows in .agent/workflows/")
 
-	// 5. ast-grep rules (.forge/rules/*.yml)
+	// 5. Antigravity Lifecycle Hooks (.agent/hooks/*.sh)
+	if err := templates.WriteHooks(root, "forge"); err != nil {
+		return fmt.Errorf("writing hooks: %w", err)
+	}
+	fmt.Println("✓ Installed Antigravity lifecycle hooks in .agent/hooks/")
+
+	// 6. ast-grep rules (.forge/rules/*.yml)
 	if err := templates.WriteRules(root, cfg.Paths.RulesDir, cfg.Language); err != nil {
 		return fmt.Errorf("writing ast-grep rules: %w", err)
 	}
 	fmt.Printf("✓ Installed ast-grep rules in %s\n", cfg.Paths.RulesDir)
 
-	// 6. MCP Serena (.mcp.json)
+	// 7. MCP Configuration (.mcp.json)
 	createdMCP, err := templates.WriteMCP(root)
 	if err != nil {
 		return fmt.Errorf("writing .mcp.json: %w", err)
 	}
 	if createdMCP {
-		fmt.Println("✓ Generated .mcp.json (Serena MCP Server)")
+		fmt.Println("✓ Generated .mcp.json (Forge & Serena MCP Servers)")
 	} else {
 		fmt.Println("✓ Preserved existing .mcp.json")
 	}
 
-	// 7. Active stage rule
+	// 8. Active stage rule
 	content, err := templates.SwapStage(root, st)
 	if err != nil {
 		return fmt.Errorf("swapping initial stage rule: %w", err)
 	}
+	_ = metrics.NewTracker(root).RecordSaving("stage_swapping", 4800)
 	fmt.Printf("✓ Injected dynamic active-stage.md (~%d tokens)\n", templates.EstimateTokens(content))
 
 	fmt.Println("\n🚀 Forge initialized successfully! Ready for '/spec' or 'forge stage spec'.")
 	return nil
 }
 
-func runStatus(root string) error {
+func runStatus(root string, args ...string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "--brief", "-b":
+			return runBriefing(root)
+		case "--stats", "-s":
+			return runStats(root)
+		}
+	}
+
 	stPath := filepath.Join(root, state.DefaultPath)
 	st, err := state.Load(root)
 	if err != nil {
-		// Try relative to DefaultPath
 		st, err = state.Load(stPath)
 		if err != nil {
 			return fmt.Errorf("cannot load state (run 'forge init' first): %w", err)
@@ -222,7 +286,7 @@ func runStatus(root string) error {
 		elapsed = fmt.Sprintf(" (%s ago)", dur)
 	}
 
-	fmt.Printf("=== Forge Pipeline Status ===\n")
+	fmt.Printf("=== Forge Pipeline Status (v%s) ===\n", strings.TrimPrefix(Version, "v"))
 	fmt.Printf("Current Stage:    %s%s\n", st.CurrentStage, elapsed)
 	if st.ActiveSpec != "" {
 		fmt.Printf("Active Spec:      %s\n", st.ActiveSpec)
@@ -244,103 +308,295 @@ func runStatus(root string) error {
 	}
 	for _, s := range stageOrder {
 		status := " [ ] PENDING"
-		if st.GatesPassed != nil && st.GatesPassed[string(s)] {
+		if st.GatesPassed[string(s)] {
 			status = " [✓] PASSED"
 		}
-		pointer := "  "
-		if st.CurrentStage == s {
-			pointer = "-> "
-		}
-		fmt.Printf("%s%-10s %s\n", pointer, s, status)
+		fmt.Printf("  Gate %-8s %s\n", s, status)
 	}
 
-	if st.TestFailCount > 0 {
-		fmt.Printf("\n⚠️ Test Fail Count: %d\n", st.TestFailCount)
-		if st.LastTestFailureSummary != "" {
-			fmt.Printf("Last Failure:\n%s\n", st.LastTestFailureSummary)
-		}
-	}
-	if st.ReviewDiffLines > 0 {
-		fmt.Printf("Review Diff Lines Recorded: %d\n", st.ReviewDiffLines)
+	if st.LastTestFailureSummary != "" {
+		fmt.Printf("\n⚠️ Last Test Failure Summary:\n%s\n", st.LastTestFailureSummary)
 	}
 
 	return nil
 }
 
-func runStage(ctx context.Context, root string, args []string) error {
-	if len(args) == 0 {
-		return errors.New("missing stage argument. Usage: forge stage <spec|plan|build|test|review|simplify|ship|idle>")
+func runBriefing(root string) error {
+	b, err := briefing.Generate(root, true)
+	if err != nil {
+		return err
+	}
+	fmt.Println(b)
+	return nil
+}
+
+func runMap(root string) error {
+	out, err := symbols.GenerateCodebaseMap(symbols.MapOptions{
+		RootDir:     root,
+		BudgetChars: 2000,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Print(out)
+	return nil
+}
+
+func runCheckpoint(root string, args []string) error {
+	mgr := checkpoint.NewManager(root)
+	if len(args) > 0 && args[0] == "list" {
+		list, err := mgr.List()
+		if err != nil {
+			return err
+		}
+		if len(list) == 0 {
+			fmt.Println("Nenhum checkpoint registrado.")
+			return nil
+		}
+		fmt.Printf("Checkpoints registrados (%d):\n", len(list))
+		for _, c := range list {
+			fmt.Printf("  • %-32s [%s] (Commit: %s) @ %s\n", c.ID, c.Label, c.CommitHash, c.Timestamp)
+		}
+		return nil
 	}
 
-	target, err := state.ParseStage(args[0])
+	label := "manual"
+	if len(args) > 0 {
+		label = args[0]
+	}
+	chk, err := mgr.Create(label)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("✓ Checkpoint criado: %s [%s] (HEAD: %s)\n", chk.ID, chk.Label, chk.CommitHash)
+	return nil
+}
+
+func runRollback(root string, args []string) error {
+	id := ""
+	if len(args) > 0 {
+		id = args[0]
+	}
+	chk, err := checkpoint.NewManager(root).Rollback(id)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("✓ Rollback executado com sucesso para checkpoint: %s [%s] (Commit: %s)\n", chk.ID, chk.Label, chk.CommitHash)
+	return nil
+}
+
+func runTest(ctx context.Context, root string, args []string) error {
+	isFailedOnly := false
+	for _, a := range args {
+		if a == "--failed" || a == "-f" {
+			isFailedOnly = true
+			break
+		}
+	}
+
+	cfg, err := config.Load(filepath.Join(root, config.DefaultPath))
+	if err != nil {
+		cfg = config.DetectProject(root)
+	}
+
+	testCmd := strings.TrimSpace(cfg.Commands.Test)
+	if testCmd == "" {
+		testCmd = "go test ./..."
+	}
+
+	if isFailedOnly {
+		rep, err := testisolate.LoadReport(root)
+		if err != nil {
+			return err
+		}
+		if rep == nil || len(rep.FailedTests) == 0 {
+			fmt.Println("✓ Nenhum teste falho registrado. Executando comando padrão...")
+		} else {
+			testCmd = rep.IsolatedCommand
+			fmt.Printf("🎯 Isolando %d teste(s) com falha:\n   Comando: %s\n\n", len(rep.FailedTests), testCmd)
+		}
+	}
+
+	r := runner.NewRunner(root)
+	cmdParts := strings.Fields(testCmd)
+	exitCode, err := r.Stream(ctx, state.StageTest, cmdParts, os.Stdout, os.Stderr)
+	if err != nil && exitCode != 0 {
+		os.Exit(exitCode)
+	}
+	return err
+}
+
+func runDebt(root string) error {
+	items, err := debt.Scan(root, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Print(debt.FormatSummary(items))
+	return nil
+}
+
+func runEnv(root string) error {
+	rep, err := envskeleton.Inspect(root)
+	if err != nil {
+		return err
+	}
+	fmt.Print(rep.FormatSummary())
+	return nil
+}
+
+func runShrink(root string, args []string) error {
+	if len(args) == 0 {
+		return errors.New("caminho do arquivo ausente. Uso: forge shrink <caminho-do-arquivo>")
+	}
+	res, err := shrink.ShrinkFile(root, args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("✓ Arquivo compactado com sucesso!\n")
+	fmt.Printf("  • Linhas:  %d -> %d (%d linhas poupadas)\n", res.OriginalLines, res.ShrunkLines, res.OriginalLines-res.ShrunkLines)
+	fmt.Printf("  • Bytes:   %d -> %d\n", res.OriginalBytes, res.ShrunkBytes)
+	fmt.Printf("  • Backup:  %s\n", res.BackupPath)
+	return nil
+}
+
+func runStats(root string) error {
+	tr := metrics.NewTracker(root)
+	data, err := tr.Load()
+	if err != nil {
+		return err
+	}
+	fmt.Print(data.SummaryString())
+	return nil
+}
+
+func runHook(root string, args []string) error {
+	if len(args) == 0 {
+		return errors.New("ação de hook ausente. Uso: forge hook <pretool|sessionstart>")
+	}
+	switch args[0] {
+	case "pretool":
+		return hooks.HandlePreTool(root, os.Stdin)
+	case "sessionstart":
+		fmt.Println(hooks.HandleSessionStart(root))
+		return nil
+	default:
+		return fmt.Errorf("ação de hook desconhecida: %q", args[0])
+	}
+}
+
+func runMCP(root string) error {
+	srv := mcp.NewServer(root, os.Stdin, os.Stdout)
+	return srv.Serve()
+}
+
+func runStage(ctx context.Context, root string, args []string) error {
+	if len(args) < 1 {
+		return errors.New("missing stage name. Usage: forge stage <name>")
+	}
+
+	targetStage, err := state.ParseStage(args[0])
 	if err != nil {
 		return err
 	}
 
+	stPath := filepath.Join(root, state.DefaultPath)
 	st, err := state.Load(root)
 	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
+		st, err = state.Load(stPath)
+		if err != nil {
+			return fmt.Errorf("cannot load state: %w", err)
+		}
 	}
 
-	if st.CurrentStage == target {
-		fmt.Printf("Already in stage %s.\n", target)
+	if st.CurrentStage == targetStage {
+		fmt.Printf("Already at stage %s\n", targetStage)
 		return nil
 	}
 
-	cfg, _ := config.Load(filepath.Join(root, config.DefaultPath))
-	mgr := gates.NewManager(root, &cfg, st, runner.NewRunner(root), runner.NewBeadClient(root))
-
-	// If moving forward in pipeline, execute the gate deterministically
-	isRollback := (st.CurrentStage == state.StageTest && target == state.StageBuild) ||
-		(st.CurrentStage == state.StageReview && target == state.StageBuild) ||
-		(st.CurrentStage == state.StageSimplify && target == state.StageBuild)
-
-	if !isRollback && st.CurrentStage != state.StageIdle {
-		fmt.Printf("🔍 Running deterministic quality gate for %s...\n", st.CurrentStage)
-		res, err := mgr.ValidateCurrentGate(ctx)
-		if err != nil {
-			fmt.Printf("❌ GATE REJECTED: %s\n", err)
-			return fmt.Errorf("transition blocked by quality gate: %w", err)
-		}
-		fmt.Printf("✓ %s passed: %s\n", res.Name, res.Details)
-	}
-
-	// Apply transition
-	if err := st.Transition(target); err != nil {
-		return fmt.Errorf("transition failed: %w", err)
-	}
-
-	// Dynamic context swapping
-	ruleContent, err := templates.SwapStage(root, st)
+	cfgPath := filepath.Join(root, config.DefaultPath)
+	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		return fmt.Errorf("failed to swap active stage rule: %w", err)
+		detected := config.DetectProject(root)
+		cfg = detected
 	}
 
-	// Save updated state
-	if err := state.Save(filepath.Join(root, state.DefaultPath), st); err != nil {
+	mgr := gates.NewManager(root, &cfg, st, nil, nil)
+
+	// Validate exit gate of current stage
+	var gateRes *gates.GateResult
+	if st.CurrentStage != state.StageIdle {
+		gateRes, err = mgr.ValidateCurrentGate(ctx)
+		if err != nil {
+			_ = state.Save(stPath, st)
+			return fmt.Errorf("cannot transition from %s to %s (quality gate failed): %w", st.CurrentStage, targetStage, err)
+		}
+	}
+
+	// Perform state transition
+	if err := st.Transition(targetStage); err != nil {
+		return fmt.Errorf("transition denied: %w", err)
+	}
+
+	// Persist state atomically
+	if err := state.Save(stPath, st); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}
 
-	tokens := templates.EstimateTokens(ruleContent)
-	fmt.Printf("✨ Swapped to stage %s. Active rule updated (%d tokens).\n", target, tokens)
+	// Swap active stage rule
+	content, err := templates.SwapStage(root, st)
+	if err != nil {
+		return fmt.Errorf("swapping stage rule: %w", err)
+	}
+	_ = metrics.NewTracker(root).RecordSaving("stage_swapping", 4800)
+
+	tokens := templates.EstimateTokens(content)
+	fmt.Printf("✓ Transitioned to %s\n", targetStage)
+	if gateRes != nil {
+		fmt.Printf("✓ %s passed: %s\n", gateRes.Name, gateRes.Details)
+	}
+	fmt.Printf("✓ Injected dynamic %s (~%d tokens)\n", templates.ActiveStagePath, tokens)
 	return nil
 }
 
 func runGate(ctx context.Context, root string, args []string) error {
+	stPath := filepath.Join(root, state.DefaultPath)
 	st, err := state.Load(root)
 	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
+		st, err = state.Load(stPath)
+		if err != nil {
+			return fmt.Errorf("cannot load state: %w", err)
+		}
 	}
 
-	cfg, _ := config.Load(filepath.Join(root, config.DefaultPath))
-	mgr := gates.NewManager(root, &cfg, st, runner.NewRunner(root), runner.NewBeadClient(root))
+	cfgPath := filepath.Join(root, config.DefaultPath)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		detected := config.DetectProject(root)
+		cfg = detected
+	}
 
+	mgr := gates.NewManager(root, &cfg, st, nil, nil)
 	var res *gates.GateResult
+
 	if len(args) > 0 {
-		var gateNum int
-		_, err := fmt.Sscanf(args[0], "%d", &gateNum)
-		if err != nil || gateNum < 1 || gateNum > 7 {
-			return fmt.Errorf("invalid gate number %q (must be 1-7)", args[0])
+		gateNum := 0
+		switch strings.ToUpper(args[0]) {
+		case "1", "SPEC":
+			gateNum = 1
+		case "2", "PLAN":
+			gateNum = 2
+		case "3", "BUILD":
+			gateNum = 3
+		case "4", "TEST":
+			gateNum = 4
+		case "5", "REVIEW":
+			gateNum = 5
+		case "6", "SIMPLIFY":
+			gateNum = 6
+		case "7", "SHIP":
+			gateNum = 7
+		default:
+			return fmt.Errorf("unknown gate identifier %q (use 1-7 or stage name)", args[0])
 		}
 		res, err = mgr.ValidateGate(ctx, gateNum)
 	} else {
@@ -352,7 +608,6 @@ func runGate(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	// Persist state updates (such as gate flags, active bead, etc.)
 	_ = state.Save(filepath.Join(root, state.DefaultPath), st)
 
 	fmt.Printf("✓ %s PASSED\nDetails: %s\n", res.Name, res.Details)
@@ -364,7 +619,6 @@ func runExec(ctx context.Context, root string, args []string) error {
 		return errors.New("missing command. Usage: forge exec [--] <command...>")
 	}
 
-	// Strip leading "--" if present
 	if args[0] == "--" {
 		args = args[1:]
 	}
@@ -381,7 +635,7 @@ func runExec(ctx context.Context, root string, args []string) error {
 	r := runner.NewRunner(root)
 	exitCode, err := r.Stream(ctx, currentStage, args, os.Stdout, os.Stderr)
 	if err != nil {
-		if errors.Is(err, runner.ErrRawReadBlocked) {
+		if errors.Is(err, runner.ErrRawReadBlocked) || errors.Is(err, runner.ErrSecretReadBlocked) {
 			os.Exit(1)
 		}
 		if exitCode != 0 {
@@ -403,7 +657,7 @@ func runDoctor(ctx context.Context, root string, args []string) error {
 		}
 	}
 	statuses := setup.CheckDependencies(ctx)
-	fmt.Print(setup.FormatDoctorReport(statuses, root))
+	fmt.Print(setup.FormatDoctorReport(statuses, root, Version))
 	return nil
 }
 
