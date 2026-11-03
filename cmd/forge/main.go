@@ -5,19 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ARILSONLIMA/forge/internal/config"
 	"github.com/ARILSONLIMA/forge/internal/gates"
 	"github.com/ARILSONLIMA/forge/internal/runner"
+	"github.com/ARILSONLIMA/forge/internal/setup"
 	"github.com/ARILSONLIMA/forge/internal/state"
 	"github.com/ARILSONLIMA/forge/internal/templates"
 )
 
 // Version is the current version of the Forge CLI.
-var Version = "0.0.1"
+var Version = "0.0.2"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -36,6 +37,8 @@ func main() {
 	ctx := context.Background()
 
 	switch cmd {
+	case "setup", "install-deps":
+		err = runSetup(ctx, rootDir, args)
 	case "init":
 		err = runInit(rootDir, args)
 	case "status":
@@ -47,7 +50,7 @@ func main() {
 	case "exec":
 		err = runExec(ctx, rootDir, args)
 	case "doctor":
-		err = runDoctor(rootDir)
+		err = runDoctor(ctx, rootDir, args)
 	case "version", "-v", "--version":
 		fmt.Printf("forge version %s\n", Version)
 		return
@@ -72,12 +75,13 @@ Usage:
   forge <command> [arguments]
 
 Commands:
+  setup [--yes]     Install and configure ecosystem dependencies (rtk, bd, sg, uvx)
   init              Initialize Forge in current project (.forge/, .agent/, .mcp.json)
   status            Show current stage, active task, gates passed and integrity
   stage <name>      Transition to target stage (validates exit gate deterministically)
   gate [number]     Validate current quality gate without advancing stage
   exec [--] <cmd>   Execute shell command with RTK proxying and raw-read guards
-  doctor            Check environment dependencies (rtk, bd, sg, uvx, git) and config
+  doctor [--install] Check environment dependencies (rtk, bd, sg, uvx, git) and config
   version           Display Forge CLI version
   help              Display this help message
 `, Version)
@@ -388,120 +392,52 @@ func runExec(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-type DoctorCheck struct {
-	Name        string
-	Required    bool
-	Installed   bool
-	VersionInfo string
-	InstallTip  string
+func runDoctor(ctx context.Context, root string, args []string) error {
+	for _, a := range args {
+		if a == "--install" || a == "--fix" {
+			return runSetup(ctx, root, args)
+		}
+	}
+	statuses := setup.CheckDependencies(ctx)
+	fmt.Print(setup.FormatDoctorReport(statuses, root))
+	return nil
 }
 
-func runDoctor(root string) error {
-	fmt.Println("🏥 Running Forge Doctor Diagnostics...")
-	fmt.Println()
+func runSetup(ctx context.Context, root string, args []string) error {
+	autoApprove := false
+	binDir := setup.GetDefaultBinDir()
 
-	checks := []DoctorCheck{
-		{
-			Name:       "git",
-			Required:   true,
-			InstallTip: "install git via apt/brew/pacman",
-		},
-		{
-			Name:       "go",
-			Required:   false,
-			InstallTip: "install go from https://go.dev/dl",
-		},
-		{
-			Name:       "rtk",
-			Required:   true,
-			InstallTip: "cargo install rtk-cli OR download binary to ~/.local/bin",
-		},
-		{
-			Name:       "agy (Antigravity CLI)",
-			Required:   true,
-			InstallTip: "install Antigravity CLI",
-		},
-		{
-			Name:       "sg (ast-grep)",
-			Required:   true,
-			InstallTip: "npm install -g @ast-grep/cli OR cargo install ast-grep",
-		},
-		{
-			Name:       "bd (Beads DAG)",
-			Required:   true,
-			InstallTip: "install beads CLI (bd) for DAG task management",
-		},
-		{
-			Name:       "uvx / uv (Serena MCP)",
-			Required:   true,
-			InstallTip: "curl -LsSf https://astral.sh/uv/install.sh | sh",
-		},
-	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "-h" || a == "--help" {
+			fmt.Println(`Usage: forge setup [options]
 
-	for i := range checks {
-		c := &checks[i]
-		path, err := exec.LookPath(c.Name)
-		if err != nil {
-			// Try alternative names
-			if c.Name == "sg (ast-grep)" {
-				path, err = exec.LookPath("ast-grep")
-			} else if c.Name == "uvx / uv (Serena MCP)" {
-				path, err = exec.LookPath("uvx")
-				if err != nil {
-					path, err = exec.LookPath("uv")
-				}
-			} else if c.Name == "agy (Antigravity CLI)" {
-				path, err = exec.LookPath("agy")
-			}
-		}
+Install and configure all Forge dependencies and environment.
 
-		if err == nil && path != "" {
-			c.Installed = true
-			c.VersionInfo = path
+Options:
+  -y, --yes       Automatically install all missing tools and run forge init without prompting
+  --bin-dir=<dir> Target directory to install binaries (default: ~/.local/bin)
+  -h, --help      Display this help message`)
+			return nil
+		} else if a == "-y" || a == "--yes" || a == "--all" || a == "--fix" || a == "--install" {
+			autoApprove = true
+		} else if strings.HasPrefix(a, "--bin-dir=") {
+			binDir = strings.TrimPrefix(a, "--bin-dir=")
+		} else if a == "--bin-dir" && i+1 < len(args) {
+			binDir = args[i+1]
+			i++
 		}
 	}
 
-	fmt.Printf("%-26s %-12s %s\n", "TOOL / DEPENDENCY", "STATUS", "LOCATION / TIP")
-	fmt.Printf("%-26s %-12s %s\n", "-----------------", "------", "--------------")
-	for _, c := range checks {
-		status := " [✓] OK"
-		loc := c.VersionInfo
-		if !c.Installed {
-			if c.Required {
-				status = " [!] MISSING"
-			} else {
-				status = " [-] OPTIONAL"
-			}
-			loc = c.InstallTip
+	shouldInit, err := setup.RunSetup(ctx, root, autoApprove, binDir)
+	if err != nil {
+		return err
+	}
+
+	if shouldInit {
+		if err := runInit(root, nil); err != nil {
+			return fmt.Errorf("failed to initialize project: %w", err)
 		}
-		fmt.Printf("%-26s %-12s %s\n", c.Name, status, loc)
-	}
-
-	fmt.Println("\nConfiguration & State Health:")
-	cfgPath := filepath.Join(root, config.DefaultPath)
-	if _, err := os.Stat(cfgPath); err == nil {
-		fmt.Printf(" [✓] %s exists\n", config.DefaultPath)
-	} else {
-		fmt.Printf(" [!] %s missing (run 'forge init')\n", config.DefaultPath)
-	}
-
-	stPath := filepath.Join(root, state.DefaultPath)
-	st, err := state.Load(stPath)
-	if err == nil {
-		if st.VerifyHash() {
-			fmt.Printf(" [✓] %s valid (Stage: %s, Hash: OK)\n", state.DefaultPath, st.CurrentStage)
-		} else {
-			fmt.Printf(" [!] %s integrity hash mismatch!\n", state.DefaultPath)
-		}
-	} else {
-		fmt.Printf(" [!] %s missing (run 'forge init')\n", state.DefaultPath)
-	}
-
-	mcpPath := filepath.Join(root, ".mcp.json")
-	if _, err := os.Stat(mcpPath); err == nil {
-		fmt.Printf(" [✓] %s exists\n", ".mcp.json")
-	} else {
-		fmt.Printf(" [-] %s missing (run 'forge init')\n", ".mcp.json")
 	}
 
 	return nil

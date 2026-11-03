@@ -29,24 +29,43 @@ O **Forge** combina qualidade máxima de código, degradação zero de contexto 
 
 ---
 
-## 📦 Instalação
+## 📦 Instalação Automatizada
 
-### Pré-requisitos
-- **Go 1.23+**
-- Ferramentas recomendadas do ecossistema:
-  - `git`
-  - [rtk](https://github.com/rtk-ai/rtk) (`cargo install rtk`)
-  - [beads](https://github.com/steveyegge/beads) (`go install github.com/steveyegge/beads/cmd/bd@latest`)
-  - [ast-grep](https://github.com/ast-grep/ast-grep) (`cargo install ast-grep --locked`)
-  - `uvx` (para levantar o Serena MCP automaticamente)
+O Forge conta com um instalador completo (`install.sh` e `forge setup`) que verifica e instala automaticamente o CLI, todas as ferramentas do ecossistema (`rtk`, `beads/bd`, `ast-grep`, `uvx`, `git`), configura o `PATH` nos arquivos de perfil do shell (`~/.bashrc`, `~/.zshrc`) e valida o ambiente com o `forge doctor`.
 
-### Compilando e Instalando o Forge
+### 1. Via Script Instalador (`install.sh`)
+
 ```bash
-# Instalação direta via Go (versão mais recente)
+# Executar a partir do repositório clonado:
+./install.sh
+
+# Modo não-interativo express (instala tudo automaticamente):
+./install.sh --yes
+
+# Ou instalação remota direta via curl:
+curl -fsSL https://raw.githubusercontent.com/ARILSONLIMA/forge/main/install.sh | bash
+```
+
+### 2. Pelo próprio Forge CLI (`forge setup`)
+
+Se você já possui o binário do Forge compilado:
+
+```bash
+# Iniciar o assistente de instalação e configuração de dependências:
+forge setup
+
+# Modo não-interativo:
+forge setup --yes
+```
+
+### 3. Compilação Manual via Go
+
+```bash
+# Instalação direta via Go:
 go install github.com/ARILSONLIMA/forge/cmd/forge@latest
 
-# Ou compilando a partir do código fonte clonado
-go build -o forge ./cmd/forge
+# Ou compilando a partir do código fonte:
+go build -o ~/.local/bin/forge ./cmd/forge
 ```
 
 Verifique seu ambiente a qualquer momento com:
@@ -59,8 +78,14 @@ forge doctor
 ## 🛠️ Comandos Principais
 
 ```bash
+# Instalar e configurar dependências do ecossistema
+forge setup
+
 # Inicializar o Forge em um projeto (detecta Go, TypeScript, Python ou Rust)
 forge init
+
+# Diagnosticar saúde das ferramentas e estado
+forge doctor
 
 # Ver o status do ciclo atual (estágio ativo, bead, gates aprovados e integridade)
 forge status

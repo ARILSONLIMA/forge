@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ARILSONLIMA/forge/internal/config"
+	"github.com/ARILSONLIMA/forge/internal/setup"
 	"github.com/ARILSONLIMA/forge/internal/state"
 )
 
@@ -53,13 +54,20 @@ func TestCLIInitAndStatus(t *testing.T) {
 	}
 
 	// 3. Run doctor
-	if err := runDoctor(tmpDir); err != nil {
+	if err := runDoctor(context.Background(), tmpDir, nil); err != nil {
 		t.Fatalf("runDoctor failed: %v", err)
 	}
 
-	// 4. Verify version
-	if Version != "0.0.1" {
-		t.Fatalf("expected version 0.0.1, got %s", Version)
+	// 4. Run setup in non-interactive mode
+	setup.CustomRCDirectory = tmpDir
+	if err := runSetup(context.Background(), tmpDir, []string{"--bin-dir=" + filepath.Join(tmpDir, "bin"), "--yes"}); err != nil {
+		t.Fatalf("runSetup failed: %v", err)
+	}
+	setup.CustomRCDirectory = ""
+
+	// 5. Verify version
+	if Version != "0.0.2" {
+		t.Fatalf("expected version 0.0.2, got %s", Version)
 	}
 }
 
