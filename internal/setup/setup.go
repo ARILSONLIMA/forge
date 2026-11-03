@@ -125,6 +125,34 @@ func CheckSingleDependency(ctx context.Context, dep Dependency) DependencyStatus
 	return status
 }
 
+// ValidateDependenciesList verifies that all dependencies marked as Required in the provided list are installed and operational.
+func ValidateDependenciesList(ctx context.Context, deps []Dependency) error {
+	var missing []string
+
+	for _, dep := range deps {
+		if !dep.Required {
+			continue
+		}
+		status := CheckSingleDependency(ctx, dep)
+		if !status.Installed {
+			missing = append(missing, fmt.Sprintf("  • %s: não encontrado no PATH (Instalação: %s)", dep.Name, dep.InstallTip))
+		} else if status.Version == "" {
+			missing = append(missing, fmt.Sprintf("  • %s: instalado em %s, mas falhou ao responder à execução ou retornou erro", dep.Name, status.Path))
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("[FORGE HARD GATE] Falha de integridade do ecossistema:\nNem todas as ferramentas necessárias para garantir o determinismo estão funcionando.\n\nFerramentas com problema:\n%s\n\nO Forge opera com portões determinísticos e não executará comandos com ferramentas degradadas.\n👉 Execute 'forge doctor' para diagnosticar ou 'forge setup' para instalar e configurar automaticamente.", strings.Join(missing, "\n"))
+	}
+
+	return nil
+}
+
+// ValidateRequiredDependencies verifies that all official tools marked as Required in AllDependencies() are installed and operational.
+func ValidateRequiredDependencies(ctx context.Context) error {
+	return ValidateDependenciesList(ctx, AllDependencies())
+}
+
 // QueryVersion attempts to extract a clean version string from a binary.
 func QueryVersion(ctx context.Context, binaryName string) string {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -260,6 +288,13 @@ func FormatDoctorReport(statuses []DependencyStatus, rootDir string, forgeVersio
 		b.WriteString(fmt.Sprintf(" [✓] %s exists (Antigravity Hard Gate active)\n", ".agent/hooks/forge-pretool.sh"))
 	} else {
 		b.WriteString(fmt.Sprintf(" [-] %s missing (run 'forge init')\n", ".agent/hooks/forge-pretool.sh"))
+	}
+
+	skillsPath := filepath.Join(rootDir, ".agents", "skills", "spec", "SKILL.md")
+	if _, err := os.Stat(skillsPath); err == nil {
+		b.WriteString(fmt.Sprintf(" [✓] %s exists (Antigravity Slash Commands active)\n", ".agents/skills/"))
+	} else {
+		b.WriteString(fmt.Sprintf(" [-] %s missing (run 'forge init')\n", ".agents/skills/"))
 	}
 
 	envRep, _ := envskeleton.Inspect(rootDir)

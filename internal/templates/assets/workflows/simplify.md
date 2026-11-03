@@ -1,4 +1,5 @@
 ---
+name: simplify
 description: "Aplica poda YAGNI (Ponytail) removendo código morto e abstrações inúteis"
 ---
 

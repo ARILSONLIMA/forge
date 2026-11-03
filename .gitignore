@@ -22,4 +22,9 @@ coverage.html
 # Local forge initialization runs (if executed in repo)
 .forge/
 .agent/
+.agents/memory/
+.agents/.cache/
+*.db
+*.db-shm
+*.db-wal
 .mcp.json

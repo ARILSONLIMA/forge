@@ -49,6 +49,9 @@ func TestSwapStageInjectsFailure(t *testing.T) {
 
 func TestWriteAll(t *testing.T) {
 	root := t.TempDir()
+	if err := WriteSkills(root); err != nil {
+		t.Fatal(err)
+	}
 	if err := WriteWorkflows(root); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +69,7 @@ func TestWriteAll(t *testing.T) {
 	if !json.Valid(data) {
 		t.Fatal("invalid .mcp.json")
 	}
-	for _, p := range []string{".agent/workflows/ship.md", ".forge/rules/complexity-guard.yml"} {
+	for _, p := range []string{".agent/workflows/ship.md", ".agents/skills/spec/SKILL.md", ".agents/skills/forge/SKILL.md", ".agent/skills/forge/SKILL.md", ".forge/rules/complexity-guard.yml"} {
 		if _, err := os.Stat(filepath.Join(root, p)); err != nil {
 			t.Fatal(err)
 		}

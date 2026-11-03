@@ -58,6 +58,48 @@ func TestCheckDependencies(t *testing.T) {
 	}
 }
 
+func TestValidateDependenciesList(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. All optional or installed tools should pass
+	validDeps := []Dependency{
+		{
+			Name:     "git",
+			Binaries: []string{"git"},
+			Required: true,
+		},
+		{
+			Name:     "optional-missing",
+			Binaries: []string{"non_existent_binary_xyz_123"},
+			Required: false,
+		},
+	}
+	if err := ValidateDependenciesList(ctx, validDeps); err != nil {
+		t.Fatalf("expected validDeps to pass, got: %v", err)
+	}
+
+	// 2. Missing required tool should fail
+	brokenDeps := []Dependency{
+		{
+			Name:        "fake-required",
+			Binaries:    []string{"non_existent_binary_xyz_123"},
+			Required:    true,
+			InstallTip:  "install fake tool",
+			Description: "fake",
+		},
+	}
+	err := ValidateDependenciesList(ctx, brokenDeps)
+	if err == nil {
+		t.Fatal("expected brokenDeps to fail, but got nil")
+	}
+	if !strings.Contains(err.Error(), "FORGE HARD GATE") {
+		t.Errorf("expected error message to contain 'FORGE HARD GATE', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "fake-required") {
+		t.Errorf("expected error message to contain 'fake-required', got: %v", err)
+	}
+}
+
 func TestFormatDoctorReport(t *testing.T) {
 	tmpDir := t.TempDir()
 	statuses := []DependencyStatus{
@@ -96,9 +138,9 @@ func TestFormatDoctorReport(t *testing.T) {
 		t.Error("report should contain '[✓] OK'")
 	}
 
-	reportWithVer := FormatDoctorReport(statuses, tmpDir, "0.0.5")
-	if !strings.Contains(reportWithVer, "Forge CLI v0.0.5") {
-		t.Errorf("expected report to contain 'Forge CLI v0.0.5', got: %s", reportWithVer)
+	reportWithVer := FormatDoctorReport(statuses, tmpDir, "0.0.6")
+	if !strings.Contains(reportWithVer, "Forge CLI v0.0.6") {
+		t.Errorf("expected report to contain 'Forge CLI v0.0.6', got: %s", reportWithVer)
 	}
 }
 

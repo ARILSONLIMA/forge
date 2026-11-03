@@ -90,8 +90,17 @@ forge doctor
 # Ver o status do ciclo atual (estágio ativo, bead, gates aprovados e integridade)
 forge status
 
+# Listar especificações e itens do roadmap (.forge/roadmap.md)
+forge spec
+forge spec list
+
+# Ativar ou gerar esqueleto de especificação por número ou slug (/spec 1)
+forge spec 1
+forge spec 01-auth
+
 # Executar a transição para um novo estágio (avalia o Quality Gate correspondente)
 forge stage spec
+forge stage spec 1
 forge stage plan
 forge stage build
 forge stage test

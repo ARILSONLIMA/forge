@@ -372,6 +372,13 @@ if [ ! -f ".forge/config.yaml" ]; then
     fi
 fi
 
+# Sync Antigravity global skills if ~/.gemini/config exists
+if [ -d "${HOME}/.gemini/config" ] && [ -d ".agents/skills" ]; then
+    mkdir -p "${HOME}/.gemini/config/skills"
+    cp -r .agents/skills/* "${HOME}/.gemini/config/skills/" 2>/dev/null || true
+    log_success "Synchronized Forge slash commands to Antigravity global skills (~/.gemini/config/skills/)"
+fi
+
 # --- Step 5: Final Health Check ---
 printf "\n"
 log_info "Running final diagnostic check with 'forge doctor'...\n"

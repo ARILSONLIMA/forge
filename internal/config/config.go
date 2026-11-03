@@ -36,6 +36,7 @@ type Paths struct {
 type Config struct {
 	Version        string         `json:"version"`
 	Language       string         `json:"language"`
+	StrictTools    bool           `json:"strict_tools"`
 	Commands       Commands       `json:"commands"`
 	GateThresholds GateThresholds `json:"gate_thresholds"`
 	Paths          Paths          `json:"paths"`
@@ -48,8 +49,9 @@ const DefaultPath = ".forge/config.yaml"
 // populated with detected language defaults.
 func DetectProject(rootDir string) Config {
 	cfg := Config{
-		Version:  "1",
-		Language: "go",
+		Version:     "1",
+		Language:    "go",
+		StrictTools: true,
 		Commands: Commands{
 			Build: "go build ./...",
 			Test:  "go test ./...",
@@ -103,6 +105,7 @@ func (c Config) MarshalYAML() string {
 	return fmt.Sprintf(`# .forge/config.yaml
 version: %q
 language: %q # Opções: go, typescript, python, rust
+strict_tools: %t
 
 commands:
   build: %q
@@ -122,6 +125,7 @@ paths:
 `,
 		c.Version,
 		c.Language,
+		c.StrictTools,
 		c.Commands.Build,
 		c.Commands.Test,
 		c.Commands.Lint,
@@ -193,6 +197,10 @@ func ParseYAML(content string) (Config, error) {
 				cfg.Version = val
 			case "language":
 				cfg.Language = val
+			case "strict_tools":
+				if b, err := strconv.ParseBool(val); err == nil {
+					cfg.StrictTools = b
+				}
 			case "build_cmd":
 				cfg.Commands.Build = val
 			case "test_cmd":

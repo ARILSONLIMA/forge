@@ -1,4 +1,5 @@
 ---
+name: test
 description: "Valida a implementação com suíte de testes filtrada pelo RTK"
 ---
 

@@ -1,4 +1,5 @@
 ---
+name: ship
 description: "Executa os gates determinísticos finais, fecha o nó no Beads e limpa a sessão"
 ---
 

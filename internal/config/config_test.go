@@ -91,4 +91,17 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
+
+	// Test strict_tools override to true
+	want.StrictTools = true
+	if err := Save(path, want); err != nil {
+		t.Fatalf("Save error: %v", err)
+	}
+	gotStrict, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if !gotStrict.StrictTools {
+		t.Fatalf("expected StrictTools to be true, got %t", gotStrict.StrictTools)
+	}
 }

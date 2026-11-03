@@ -1,4 +1,5 @@
 ---
+name: review
 description: "Audita o diff semântico contra a Spec e valida integridade de contratos"
 ---
 

@@ -16,6 +16,7 @@ import (
 	"github.com/ARILSONLIMA/forge/internal/complexity"
 	"github.com/ARILSONLIMA/forge/internal/config"
 	"github.com/ARILSONLIMA/forge/internal/runner"
+	"github.com/ARILSONLIMA/forge/internal/specs"
 	"github.com/ARILSONLIMA/forge/internal/state"
 	"github.com/ARILSONLIMA/forge/internal/testisolate"
 )
@@ -161,15 +162,10 @@ func (m *Manager) ValidateGate1(ctx context.Context) (*GateResult, error) {
 
 	specPath := m.State.ActiveSpec
 	if specPath == "" {
-		// Discover if there is a single spec in .forge/specs/
-		specsDir := filepath.Join(m.RootDir, m.Config.Paths.SpecsDir)
-		entries, _ := os.ReadDir(specsDir)
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-				specPath = filepath.Join(m.Config.Paths.SpecsDir, e.Name())
-				m.State.ActiveSpec = specPath
-				break
-			}
+		// Discover specs in numerical order in specs dir
+		if spList, err := specs.ListSpecs(m.RootDir, m.Config.Paths.SpecsDir, ""); err == nil && len(spList) > 0 {
+			specPath = spList[0].RelPath
+			m.State.ActiveSpec = specPath
 		}
 	}
 

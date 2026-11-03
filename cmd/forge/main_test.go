@@ -49,6 +49,14 @@ func TestCLIInitAndStatus(t *testing.T) {
 		}
 	}
 
+	// Verify Antigravity skills generated
+	for _, s := range []string{"spec", "plan", "build", "test", "review", "simplify", "ship", "forge"} {
+		sFile := filepath.Join(tmpDir, ".agents", "skills", s, "SKILL.md")
+		if _, err := os.Stat(sFile); err != nil {
+			t.Fatalf("expected skill %s to exist", s)
+		}
+	}
+
 	// Verify hooks generated
 	for _, h := range []string{"forge-pretool.sh", "forge-sessionstart.sh"} {
 		hFile := filepath.Join(tmpDir, ".agent", "hooks", h)
@@ -81,8 +89,8 @@ func TestCLIInitAndStatus(t *testing.T) {
 	setup.CustomRCDirectory = ""
 
 	// 5. Verify version
-	if Version != "0.0.5" {
-		t.Fatalf("expected version 0.0.5, got %s", Version)
+	if Version != "0.0.6" {
+		t.Fatalf("expected version 0.0.6, got %s", Version)
 	}
 
 	// 6. Test update --help
@@ -220,5 +228,75 @@ func TestCLIStageTransitions(t *testing.T) {
 	st, _ = state.Load(filepath.Join(tmpDir, state.DefaultPath))
 	if st.CurrentStage != state.StagePlan {
 		t.Fatalf("expected stage PLAN, got %s", st.CurrentStage)
+	}
+}
+
+func TestPreflightHardGateHelpers(t *testing.T) {
+	// 1. Verify exempt commands
+	exempt := []string{"setup", "doctor", "version", "-v", "--version", "help", "-h", "--help", "update", "install-deps", "spec", "specs"}
+	for _, c := range exempt {
+		if !isExemptFromToolCheck(c) {
+			t.Errorf("expected command %q to be exempt from tool pre-flight check", c)
+		}
+	}
+
+	// 2. Verify non-exempt commands
+	nonExempt := []string{"status", "stage", "gate", "test", "build", "review", "simplify", "ship", "exec", "briefing", "map", "checkpoint", "rollback", "debt", "env", "shrink", "stats", "hook", "mcp"}
+	for _, c := range nonExempt {
+		if isExemptFromToolCheck(c) {
+			t.Errorf("expected command %q NOT to be exempt from tool pre-flight check", c)
+		}
+	}
+
+	// 3. Test filterSkipToolCheckArg
+	skip, filtered := filterSkipToolCheckArg([]string{"stage", "--skip-tool-check", "build"})
+	if !skip {
+		t.Error("expected skip to be true")
+	}
+	if len(filtered) != 2 || filtered[0] != "stage" || filtered[1] != "build" {
+		t.Errorf("expected filtered args ['stage', 'build'], got %v", filtered)
+	}
+}
+
+func TestCLISpecCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := runInit(tmpDir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify roadmap template was created
+	roadmapFile := filepath.Join(tmpDir, ".forge", "roadmap.md")
+	if _, err := os.Stat(roadmapFile); err != nil {
+		t.Fatalf("expected .forge/roadmap.md to be created by runInit: %v", err)
+	}
+
+	// 1. Run 'forge spec list'
+	if err := runSpec(tmpDir, []string{"list"}); err != nil {
+		t.Fatalf("runSpec list failed: %v", err)
+	}
+
+	// 2. Run 'forge spec 1' - should resolve roadmap item 1, create skeleton, and set active
+	if err := runSpec(tmpDir, []string{"1"}); err != nil {
+		t.Fatalf("runSpec 1 failed: %v", err)
+	}
+
+	st, err := state.Load(filepath.Join(tmpDir, state.DefaultPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(st.ActiveSpec, ".forge/specs/01-") {
+		t.Fatalf("expected ActiveSpec to start with .forge/specs/01-, got %s", st.ActiveSpec)
+	}
+
+	// Verify skeleton was written
+	fullSpecPath := filepath.Join(tmpDir, st.ActiveSpec)
+	if _, err := os.Stat(fullSpecPath); err != nil {
+		t.Fatalf("expected skeleton %s to exist on disk", fullSpecPath)
+	}
+
+	// 3. Test 'forge stage spec 1'
+	ctx := context.Background()
+	if err := runStage(ctx, tmpDir, []string{"spec", "1"}); err != nil {
+		t.Fatalf("runStage spec 1 failed: %v", err)
 	}
 }
